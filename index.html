@@ -483,10 +483,8 @@
     <h1>TSZ Sales Trainer</h1>
     <p>Metodo Guido Alberti · Voce bidirezionale<br>Allena i tuoi venditori con simulazioni AI realistiche</p>
 
-    <div class="api-input-wrap">
-      <label>🔑 ANTHROPIC API KEY</label>
-      <input type="password" id="api-key-input" placeholder="sk-ant-..." autocomplete="off" />
-    </div>
+    <!-- API key gestita dal backend — nessuna key richiesta all'utente -->
+    <input type="hidden" id="api-key-input" value="backend" />
 
     <div class="toggle-row">
       <span style="color:var(--muted)">Modalità testo</span>
@@ -743,37 +741,36 @@ function showScreen(id) {
 // ════════════════════════════════════════════
 // API CALL
 // ════════════════════════════════════════════
+// URL del backend — viene aggiornato automaticamente dopo il deploy
+const BACKEND_URL = 'https://tsz-sales-trainer-api.onrender.com';
+
 async function callClaude(messages, system, maxTokens = 800) {
-  const key = STATE.apiKey || document.getElementById('api-key-input').value.trim();
-  if (!key) throw new Error('API key mancante');
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
+  const res = await fetch(BACKEND_URL + '/chat', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': key,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true'
-    },
-    body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: maxTokens, system, messages })
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messages, system, max_tokens: maxTokens })
   });
   const data = await res.json();
-  if (data.error) throw new Error(data.error.message);
-  return data.content?.[0]?.text || '';
+  if (data.detail) throw new Error(data.detail);
+  return data.text || '';
 }
 
 // ════════════════════════════════════════════
 // PDF EXTRACTION
 // ════════════════════════════════════════════
 async function extractPdf(base64) {
-  const text = await callClaude([{
-    role: 'user',
-    content: [
-      { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } },
-      { type: 'text', text: 'Estrai e restituisci SOLO questo JSON senza markdown:\n{"cliente_nome":"...","indirizzo":"...","prodotti":["..."],"importo_totale":"...","materiali":"...","tempistiche":"...","note_speciali":"..."}' }
-    ]
-  }], '', 600);
-  try { return JSON.parse(text.replace(/```json|```/g,'').trim()); }
-  catch { return { cliente_nome:'Cliente', importo_totale:'N/D', prodotti:[] }; }
+  try {
+    const res = await fetch(BACKEND_URL + '/extract-pdf', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ base64_pdf: base64 })
+    });
+    const data = await res.json();
+    if (data.detail) throw new Error(data.detail);
+    return data;
+  } catch {
+    return { cliente_nome:'Cliente', importo_totale:'N/D', prodotti:['Serramenti vari'] };
+  }
 }
 
 // ════════════════════════════════════════════
@@ -817,11 +814,6 @@ function handleDrop(e) {
 
 async function handleFile(file) {
   if (!file || file.type !== 'application/pdf') return;
-  const key = document.getElementById('api-key-input').value.trim();
-  if (!key) { alert('Inserisci prima la tua API key Anthropic'); return; }
-  STATE.apiKey = key;
-  saveApiKey(key);
-
   const dc = document.getElementById('drop-content');
   dc.innerHTML = '<div style="color:var(--blue)">⏳ Analisi preventivo in corso...</div>';
 
@@ -836,10 +828,6 @@ async function handleFile(file) {
 }
 
 function loadDemo() {
-  const key = document.getElementById('api-key-input').value.trim();
-  if (!key) { alert('Inserisci prima la tua API key Anthropic'); return; }
-  STATE.apiKey = key;
-  saveApiKey(key);
   STATE.profile = {
     cliente_nome: 'Marco Bianchi',
     importo_totale: '€ 9.200',
@@ -1524,21 +1512,7 @@ function switchTab(tab) {
 // ════════════════════════════════════════════
 // PERSISTENZA API KEY (localStorage)
 // ════════════════════════════════════════════
-function saveApiKey(key) {
-  if (key) localStorage.setItem('tsz_anthropic_key', key);
-}
-function loadSavedApiKey() {
-  const saved = localStorage.getItem('tsz_anthropic_key');
-  if (saved) {
-    document.getElementById('api-key-input').value = saved;
-    STATE.apiKey = saved;
-  }
-}
-document.addEventListener('DOMContentLoaded', loadSavedApiKey);
-document.getElementById('api-key-input').addEventListener('blur', function() {
-  const k = this.value.trim();
-  if (k) { STATE.apiKey = k; saveApiKey(k); }
-});
+// API key non più necessaria: gestita dal backend
 
 // ════════════════════════════════════════════
 // RESET
@@ -1554,7 +1528,7 @@ function resetAll() {
   STATE.isListening = false;
   STATE.isSpeaking  = false;
   STATE.isAIThinking = false;
-  document.getElementById('api-key-input').value = STATE.apiKey; // mantieni la chiave
+  // API key gestita dal backend
   const dc = document.getElementById('drop-content');
   dc.innerHTML = '<div class="icon">📄</div><strong>Carica preventivo PDF</strong><span>Trascina qui o clicca per selezionare</span>';
   showScreen('upload');
