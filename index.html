@@ -495,6 +495,11 @@
       </div>
       <span id="voice-label" style="color:var(--blue);font-weight:700">🎙 Modalità vocale</span>
     </div>
+    <div class="toggle-row" id="voice-gender-row" style="justify-content:center;gap:8px">
+      <span style="color:var(--muted);font-size:11px">Voce cliente:</span>
+      <button id="btn-voice-f" onclick="setVoiceGender('female')" class="btn-sm active-mode" style="font-size:12px">👩 Donna</button>
+      <button id="btn-voice-m" onclick="setVoiceGender('male')" class="btn-sm" style="font-size:12px">👨 Uomo</button>
+    </div>
 
     <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()"
          ondragover="event.preventDefault()" ondrop="handleDrop(event)">
@@ -688,6 +693,7 @@ const PHASES = [
 // Speech
 let recognition = null;
 let synth = window.speechSynthesis;
+STATE.voiceGender = localStorage.getItem('tsz_voice_gender') || 'female';
 let finalTranscript = '';
 
 // Volume meter
@@ -1143,10 +1149,54 @@ async function handleTextSend() {
 // ════════════════════════════════════════════
 // SPEECH SYNTHESIS (TTS)
 // ════════════════════════════════════════════
+// Selezione voce genere
+function setVoiceGender(gender) {
+  STATE.voiceGender = gender;
+  localStorage.setItem('tsz_voice_gender', gender);
+  document.getElementById('btn-voice-f').classList.toggle('active-mode', gender === 'female');
+  document.getElementById('btn-voice-m').classList.toggle('active-mode', gender === 'male');
+}
+// Inizializza UI genere voce
+(function initVoiceGenderUI() {
+  const saved = localStorage.getItem('tsz_voice_gender') || 'female';
+  STATE.voiceGender = saved;
+  document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('btn-voice-f').classList.toggle('active-mode', saved === 'female');
+    document.getElementById('btn-voice-m').classList.toggle('active-mode', saved === 'male');
+  });
+})();
+
+function getBestItalianVoice(gender) {
+  const voices = synth.getVoices();
+  const itVoices = voices.filter(v => v.lang.startsWith('it'));
+  if (!itVoices.length) return null;
+
+  // Nomi tipicamente femminili nelle voci di sistema
+  const femaleNames = ['alice', 'federica', 'elsa', 'silvia', 'luca', 'paola', 'sara', 'giulia',
+                       'bianca', 'valentina', 'female', 'donna', 'woman', 'femmina'];
+  // Nomi tipicamente maschili
+  const maleNames   = ['luca', 'matteo', 'marco', 'giorgio', 'male', 'uomo', 'man', 'maschio'];
+
+  const targetNames = gender === 'female' ? femaleNames : maleNames;
+
+  // 1. Cerca voce premium/naturale con nome corrispondente
+  let found = itVoices.find(v => {
+    const n = v.name.toLowerCase();
+    return targetNames.some(t => n.includes(t)) && (v.localService === false || n.includes('natural') || n.includes('premium') || n.includes('enhanced') || n.includes('neural'));
+  });
+  // 2. Cerca qualsiasi voce con nome corrispondente
+  if (!found) found = itVoices.find(v => {
+    const n = v.name.toLowerCase();
+    return targetNames.some(t => n.includes(t));
+  });
+  // 3. Fallback: prima voce italiana disponibile
+  if (!found) found = itVoices[0];
+  return found;
+}
+
 function speakText(text, onEnd) {
   if (!synth) return;
   synth.cancel();
-
   // Rimuove didascalie *...* e parentesi — da interpretare non leggere
   const clean = text
     .replace(/\*[^*]+\*/g, '')
@@ -1154,15 +1204,13 @@ function speakText(text, onEnd) {
     .replace(/\[[^\]]*\]/g, '')
     .replace(/\s{2,}/g, ' ')
     .trim();
-
   const utt = new SpeechSynthesisUtterance(clean);
   utt.lang  = 'it-IT';
-  utt.rate  = 0.95;
-  utt.pitch = 1.0;
-
-  const voices = synth.getVoices();
-  const itVoice = voices.find(v => v.lang.startsWith('it'));
-  if (itVoice) utt.voice = itVoice;
+  utt.rate  = 0.92;   // leggermente più lento per naturalezza
+  utt.pitch = STATE.voiceGender === 'female' ? 1.05 : 0.90;
+  utt.volume = 1.0;
+  const bestVoice = getBestItalianVoice(STATE.voiceGender);
+  if (bestVoice) utt.voice = bestVoice;
 
   utt.onstart = () => {
     STATE.isSpeaking = true;
