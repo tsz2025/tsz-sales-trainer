@@ -814,6 +814,7 @@ async function handleFile(file) {
   const key = document.getElementById('api-key-input').value.trim();
   if (!key) { alert('Inserisci prima la tua API key Anthropic'); return; }
   STATE.apiKey = key;
+  saveApiKey(key);
 
   const dc = document.getElementById('drop-content');
   dc.innerHTML = '<div style="color:var(--blue)">⏳ Analisi preventivo in corso...</div>';
@@ -832,6 +833,7 @@ function loadDemo() {
   const key = document.getElementById('api-key-input').value.trim();
   if (!key) { alert('Inserisci prima la tua API key Anthropic'); return; }
   STATE.apiKey = key;
+  saveApiKey(key);
   STATE.profile = {
     cliente_nome: 'Marco Bianchi',
     importo_totale: '€ 9.200',
@@ -1470,6 +1472,25 @@ function switchTab(tab) {
         </div>`).join('');
   }
 }
+
+// ════════════════════════════════════════════
+// PERSISTENZA API KEY (localStorage)
+// ════════════════════════════════════════════
+function saveApiKey(key) {
+  if (key) localStorage.setItem('tsz_anthropic_key', key);
+}
+function loadSavedApiKey() {
+  const saved = localStorage.getItem('tsz_anthropic_key');
+  if (saved) {
+    document.getElementById('api-key-input').value = saved;
+    STATE.apiKey = saved;
+  }
+}
+document.addEventListener('DOMContentLoaded', loadSavedApiKey);
+document.getElementById('api-key-input').addEventListener('blur', function() {
+  const k = this.value.trim();
+  if (k) { STATE.apiKey = k; saveApiKey(k); }
+});
 
 // ════════════════════════════════════════════
 // RESET
